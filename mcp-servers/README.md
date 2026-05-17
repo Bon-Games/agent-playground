@@ -2,7 +2,7 @@
 
 Manages a local stack of MCP (Model Context Protocol) servers running behind Docker. Servers are defined in `config/mcp-servers.json`, cloned or built from local Dockerfiles, and exposed over HTTP so Claude Code can connect to them.
 
-The base `docker-compose.yml` runs [9router](https://github.com/decolua/9router) as a reverse proxy. An auto-generated `docker-compose.override.yml` adds the MCP server services on top.
+The base `docker-compose.yml` runs [9router](https://github.com/decolua/9router), an AI provider router for managing LLM API keys and routing across providers. An auto-generated `docker-compose.override.yml` adds the MCP server services on top. The two are independent — 9router handles LLM API calls, while the MCP servers expose tools directly to Claude Code.
 
 `install.sh` writes `.mcp.json` to both this directory and the **project root** (`../`). Claude Code reads `.mcp.json` from the project root automatically, so no manual Claude config changes are ever needed.
 
