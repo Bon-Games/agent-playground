@@ -2,43 +2,48 @@ import json, subprocess, os, sys
 
 
 def usage():
-    print("Usage: install.sh [--only <name1,name2,...>]")
-    print("       install.sh          # clone/update all servers")
-    print("       install.sh --only unity-mcp,other-server")
+    print("Usage: install.sh [--config <path>]")
+    print("       install.sh                               # install all servers")
+    print("       install.sh --config config/unity.json   # use a specific config file")
     sys.exit(1)
 
 
-# Parse optional --only flag
-only = None
+def build_config(s):
+    """Return (build_context, dockerfile) for docker-compose."""
+    if s.get("source") == "local":
+        return f"./{s['local_path']}", "Dockerfile"
+    return f"./servers/{s['name']}", s.get("dockerfile", "Dockerfile")
+
+
+# Parse flags
+config_file = "config/mcp-servers.json"
 args = sys.argv[1:]
-if args:
-    if args[0] == "--only" and len(args) == 2:
-        only = set(args[1].split(","))
+while args:
+    if args[0] == "--config" and len(args) >= 2:
+        config_file = args[1]
+        args = args[2:]
     else:
         usage()
 
-with open("config/mcp-servers.json") as f:
+with open(config_file) as f:
     config = json.load(f)
 
 servers = config.get("servers", [])
 if not servers:
-    print("No servers defined in mcp-servers.json")
+    print("No servers defined in", config_file)
     sys.exit(0)
 
-if only:
-    unknown = only - {s["name"] for s in servers}
-    if unknown:
-        print(f"Unknown servers: {', '.join(unknown)}")
-        sys.exit(1)
-    servers_to_clone = [s for s in servers if s["name"] in only]
-else:
-    servers_to_clone = servers
+servers_to_clone = servers
 
 os.makedirs("servers", exist_ok=True)
 
-# Clone or update each server
+# Clone or update each git-sourced server
 for s in servers_to_clone:
     name = s["name"]
+    if s.get("source") == "local":
+        print(f"[{name}] local source, skipping clone.")
+        continue
+
     repo = s["repo"]
     branch = s.get("branch", "main")
     dest = os.path.join("servers", name)
@@ -53,19 +58,18 @@ for s in servers_to_clone:
             check=True,
         )
 
-# Generate docker-compose.override.yml for ALL configured servers
-# (so services are always defined even if some repos weren't re-cloned this run)
+# Generate docker-compose.override.yml for ALL servers in this config
 lines = ["services:"]
 for s in servers:
     name = s["name"]
     port = s["port"]
-    dockerfile = s.get("dockerfile", "Dockerfile")
     command = s.get("command", "")
+    context, dockerfile = build_config(s)
 
     lines += [
         f"  {name}:",
         f"    build:",
-        f"      context: ./servers/{name}",
+        f"      context: {context}",
         f"      dockerfile: {dockerfile}",
         f"    container_name: {name}",
         f"    ports:",
@@ -84,7 +88,7 @@ print("Generated docker-compose.override.yml")
 mcp_servers = {}
 for s in servers:
     mcp_servers[s["name"]] = {
-        "type": "http",
+        "type": s.get("transport", "http"),
         "url": f"http://localhost:{s['port']}{s.get('mcp_path', '/mcp')}",
     }
 
