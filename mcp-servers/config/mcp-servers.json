@@ -1,0 +1,13 @@
+{
+  "servers": [
+    {
+      "name": "unity-mcp",
+      "repo": "https://github.com/CoplayDev/unity-mcp",
+      "branch": "beta",
+      "dockerfile": "Server/Dockerfile",
+      "port": 8080,
+      "mcp_path": "/mcp",
+      "command": "--transport http --http-host 0.0.0.0 --http-port 8080"
+    }
+  ]
+}
