@@ -92,9 +92,16 @@ for s in servers:
         "url": f"http://localhost:{s['port']}{s.get('mcp_path', '/mcp')}",
     }
 
+mcp_json = json.dumps({"mcpServers": mcp_servers}, indent=2) + "\n"
+
 with open(".mcp.json", "w") as f:
-    json.dump({"mcpServers": mcp_servers}, f, indent=2)
-    f.write("\n")
-print("Updated .mcp.json")
+    f.write(mcp_json)
+print("Updated mcp-servers/.mcp.json")
+
+# Also write to project root so Claude Code picks it up automatically
+root_mcp = os.path.join("..", ".mcp.json")
+with open(root_mcp, "w") as f:
+    f.write(mcp_json)
+print(f"Updated {os.path.normpath(root_mcp)} (project root — Claude Code reads this)")
 
 print("\nDone. Run 'docker compose up -d --build' to start the stack.")

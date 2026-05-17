@@ -1,8 +1,10 @@
 # MCP Servers
 
-Manages a local stack of MCP (Model Context Protocol) servers running behind Docker. Servers are defined in config JSON files (default: `config/mcp-servers.json`), cloned or built from local Dockerfiles, and exposed over HTTP so Claude Code can connect to them.
+Manages a local stack of MCP (Model Context Protocol) servers running behind Docker. Servers are defined in `config/mcp-servers.json`, cloned or built from local Dockerfiles, and exposed over HTTP so Claude Code can connect to them.
 
 The base `docker-compose.yml` runs [9router](https://github.com/decolua/9router) as a reverse proxy. An auto-generated `docker-compose.override.yml` adds the MCP server services on top.
+
+`install.sh` writes `.mcp.json` to both this directory and the **project root** (`../`). Claude Code reads `.mcp.json` from the project root automatically, so no manual Claude config changes are ever needed.
 
 ## Prerequisites
 
@@ -10,32 +12,33 @@ The base `docker-compose.yml` runs [9router](https://github.com/decolua/9router)
 - Python 3
 - Git
 
-## Quick Start
+## Startup
 
 ```bash
-# 1. Clone and build all servers
+# 1. Clone/pull server repos and generate config files
 ./install.sh
 
-# 2. Start the stack
+# 2. Build images and start all containers
 docker compose up -d --build
+
+# 3. Reload Claude Code to pick up the updated .mcp.json
+#    Use /reload in Claude Code, or restart it
 ```
 
-Claude Code will pick up `.mcp.json` automatically and connect to the running servers.
+The servers will be available at their configured ports (e.g. `http://localhost:8080/mcp`). Claude Code reads the project-root `.mcp.json` on startup and connects automatically.
 
 ## Install
 
 ```bash
-./install.sh                                    # install all servers from default config
-./install.sh --config config/unity.json        # use a specific config file
+./install.sh                              # install all servers from default config
+./install.sh --config config/unity.json  # use a specific config file
 ```
 
 `install.sh` does three things:
 
 1. Clones (or pulls) each git-sourced server repo into `servers/<name>/`
 2. Generates `docker-compose.override.yml` with a build service per server
-3. Writes `.mcp.json` with the endpoint for each server
-
-You can maintain multiple config files (e.g. `config/unity.json`, `config/ai-tools.json`) to group related servers and install them independently.
+3. Writes `.mcp.json` to both `mcp-servers/` and the project root
 
 ## Uninstall
 
@@ -87,24 +90,32 @@ Two source types are supported: `git` (default) for repos that provide their own
 | `mcp_path` | both | no | Path for the MCP endpoint (default: `/mcp`) |
 | `command` | both | no | Override the container `CMD` |
 
-Then run `./install.sh --only my-server && docker compose up -d --build my-server`.
+After editing the config:
+
+```bash
+./install.sh
+docker compose up -d --build
+# Then reload Claude Code to pick up the new server
+```
 
 ## File Structure
 
 ```
 mcp-servers/
 ├── config/
-│   └── mcp-servers.json       # server definitions (source of truth)
-├── dockerfiles/               # Dockerfiles for local-sourced servers
+│   └── mcp-servers.json         # server definitions (source of truth)
+├── dockerfiles/                 # Dockerfiles for local-sourced servers
 │   └── context7/
 │       └── Dockerfile
 ├── scripts/
-│   ├── install.py             # install logic
-│   └── uninstall.py           # uninstall logic
-├── servers/                   # cloned server repos (gitignored)
-├── docker-compose.yml         # base stack (9router)
+│   ├── install.py               # install logic
+│   └── uninstall.py             # uninstall logic
+├── servers/                     # cloned server repos (gitignored)
+├── docker-compose.yml           # base stack (9router)
 ├── docker-compose.override.yml  # generated MCP services (gitignored)
-├── .mcp.json                  # generated Claude Code config (gitignored)
+├── .mcp.json                    # generated Claude Code config (gitignored)
 ├── install.sh
 └── uninstall.sh
 ```
+
+The project root also gets a `.mcp.json` (written by `install.sh`) — that is the file Claude Code actually reads.
