@@ -1,0 +1,16 @@
+{
+  "name": "atlassian",
+  "source": "image",
+  "image": "mcp/atlassian:latest",
+  "port": 9090,
+  "mcp_path": "/mcp",
+  "description": "Jira + Confluence via official Docker Hub image",
+  "environment": {
+    "CONFLUENCE_URL": "${CONFLUENCE_URL}",
+    "CONFLUENCE_USERNAME": "${CONFLUENCE_USERNAME}",
+    "CONFLUENCE_API_TOKEN": "${CONFLUENCE_API_TOKEN}",
+    "JIRA_URL": "${JIRA_URL}",
+    "JIRA_USERNAME": "${JIRA_USERNAME}",
+    "JIRA_API_TOKEN": "${JIRA_API_TOKEN}"
+  }
+}

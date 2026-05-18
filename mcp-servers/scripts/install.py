@@ -1,47 +1,136 @@
-import json, subprocess, os, sys
+import json, subprocess, os, sys, platform as _platform
+sys.path.insert(0, os.path.dirname(__file__))
+from lib import load_catalog
+
+
+DEFAULT_PROFILE = "config/profiles/default.json"
+TOOLS_DIR = "tools"
 
 
 def usage():
-    print("Usage: install.sh [--config <path>]")
-    print("       install.sh                               # install all servers")
-    print("       install.sh --config config/unity.json   # use a specific config file")
+    print("Usage: install.sh [--profile <path>]")
+    print("       install.sh                                        # uses default profile")
+    print("       install.sh --profile config/profiles/unity.json  # named profile")
     sys.exit(1)
 
 
-def build_config(s):
-    """Return (build_context, dockerfile) for docker-compose."""
-    if s.get("source") == "local":
-        return f"./{s['local_path']}", "Dockerfile"
-    return f"./servers/{s['name']}", s.get("dockerfile", "Dockerfile")
+def resolve_profile(tools_dir, profile_path):
+    catalog = load_catalog(tools_dir)
+    current_os = _platform.system().lower()
+
+    with open(profile_path) as f:
+        profile = json.load(f)
+
+    active_servers, remote_services, plugins = [], [], []
+    for name in profile.get("servers", []):
+        if name not in catalog:
+            print(f"[WARN] '{name}' not in tools/ catalog — skipping")
+            continue
+        entry = catalog[name]
+        source = entry.get("source", "git")
+        if source == "plugin":
+            plugins.append(entry)
+            continue
+        if source == "remote":
+            remote_services.append(entry)
+            continue
+        allowed = entry.get("platform", ["linux", "darwin", "windows"])
+        if current_os not in allowed:
+            print(f"[WARN] '{name}' not supported on {current_os} — skipping")
+            continue
+        active_servers.append(entry)
+
+    return active_servers, remote_services, plugins
+
+
+def service_lines(s):
+    name = s["name"]
+    port = s["port"]
+    source = s.get("source", "git")
+
+    lines = [f"  {name}:"]
+
+    if source == "image":
+        lines.append(f"    image: {s['image']}")
+    else:
+        if source == "local":
+            ctx = f"./{s.get('local_path', os.path.join('tools', name))}"
+        else:
+            ctx = f"./servers/{name}"
+        lines += [
+            f"    build:",
+            f"      context: {ctx}",
+            f"      dockerfile: {s.get('dockerfile', 'Dockerfile')}",
+        ]
+
+    lines += [
+        f"    container_name: {name}",
+        f"    ports:",
+        f'      - "{port}:{port}"',
+    ]
+
+    environment = s.get("environment", {})
+    if environment:
+        lines.append("    environment:")
+        for k, v in environment.items():
+            lines.append(f"      {k}: {v}")
+
+    volumes = s.get("volumes", [])
+    if volumes:
+        lines.append("    volumes:")
+        for v in volumes:
+            lines.append(f"      - {v}")
+
+    if s.get("command"):
+        lines.append(f"    command: {s['command']}")
+
+    lines += ["    restart: unless-stopped", ""]
+    return lines
+
+
+def generate_env_template(tools, output_path="env.template"):
+    parts = []
+    for t in tools:
+        env_file = os.path.join(t.get("local_path", os.path.join("tools", t["name"])), ".env")
+        if not os.path.exists(env_file):
+            continue
+        with open(env_file) as f:
+            content = f.read().strip()
+        if content:
+            parts.append(f"# --- {t['name']} ---\n{content}")
+    if parts:
+        with open(output_path, "w") as f:
+            f.write("\n\n".join(parts) + "\n")
+        print(f"Generated {output_path} — copy to .env and fill in your values")
+    else:
+        print("No env vars required for this profile")
 
 
 # Parse flags
-config_file = "config/mcp-servers.json"
+profile_file = None
 args = sys.argv[1:]
 while args:
-    if args[0] == "--config" and len(args) >= 2:
-        config_file = args[1]
+    if args[0] == "--profile" and len(args) >= 2:
+        profile_file = args[1]
         args = args[2:]
     else:
         usage()
 
-with open(config_file) as f:
-    config = json.load(f)
+profile_file = profile_file or DEFAULT_PROFILE
+active_servers, remote_services, plugins = resolve_profile(TOOLS_DIR, profile_file)
 
-servers = config.get("servers", [])
-if not servers:
-    print("No servers defined in", config_file)
+if not active_servers and not remote_services and not plugins:
+    print("No tools to install.")
     sys.exit(0)
-
-servers_to_clone = servers
 
 os.makedirs("servers", exist_ok=True)
 
-# Clone or update each git-sourced server
-for s in servers_to_clone:
+# Clone or update git-sourced servers
+for s in active_servers:
     name = s["name"]
-    if s.get("source") == "local":
-        print(f"[{name}] local source, skipping clone.")
+    source = s.get("source", "git")
+    if source in ("local", "image"):
+        print(f"[{name}] {source} source, skipping clone.")
         continue
 
     repo = s["repo"]
@@ -58,44 +147,24 @@ for s in servers_to_clone:
             check=True,
         )
 
-# Generate docker-compose.override.yml for ALL servers in this config
-lines = ["services:"]
-for s in servers:
-    name = s["name"]
-    port = s["port"]
-    command = s.get("command", "")
-    environment = s.get("environment", {})
-    context, dockerfile = build_config(s)
-
-    lines += [
-        f"  {name}:",
-        f"    build:",
-        f"      context: {context}",
-        f"      dockerfile: {dockerfile}",
-        f"    container_name: {name}",
-        f"    ports:",
-        f'      - "{port}:{port}"',
-    ]
-    if environment:
-        lines.append("    environment:")
-        for k, v in environment.items():
-            lines.append(f"      {k}: {v}")
-    if command:
-        lines.append(f"    command: {command}")
-    lines.append(f"    restart: unless-stopped")
-    lines.append("")
+# Generate docker-compose.override.yml
+compose_lines = ["services:"]
+for s in active_servers:
+    compose_lines.extend(service_lines(s))
 
 with open("docker-compose.override.yml", "w") as f:
-    f.write("\n".join(lines))
+    f.write("\n".join(compose_lines) + "\n")
 print("Generated docker-compose.override.yml")
 
-# Regenerate .mcp.json
+# Build .mcp.json (active servers + remote services)
 mcp_servers = {}
-for s in servers:
+for s in active_servers:
     mcp_servers[s["name"]] = {
         "type": s.get("transport", "http"),
         "url": f"http://localhost:{s['port']}{s.get('mcp_path', '/mcp')}",
     }
+for r in remote_services:
+    mcp_servers[r["name"]] = {"type": "http", "url": r["url"]}
 
 mcp_json = json.dumps({"mcpServers": mcp_servers}, indent=2) + "\n"
 
@@ -103,7 +172,6 @@ with open(".mcp.json", "w") as f:
     f.write(mcp_json)
 print("Updated mcp-servers/.mcp.json")
 
-# Also write to project root so Claude Code picks it up automatically
 root_mcp = os.path.join("..", ".mcp.json")
 with open(root_mcp, "w") as f:
     f.write(mcp_json)
@@ -111,10 +179,10 @@ print(f"Updated {os.path.normpath(root_mcp)} (project root — Claude Code reads
 
 # Regenerate .gemini/settings.json
 gemini_mcp = {}
-for s in servers:
-    gemini_mcp[s["name"]] = {
-        "url": f"http://localhost:{s['port']}{s.get('mcp_path', '/mcp')}"
-    }
+for s in active_servers:
+    gemini_mcp[s["name"]] = {"url": f"http://localhost:{s['port']}{s.get('mcp_path', '/mcp')}"}
+for r in remote_services:
+    gemini_mcp[r["name"]] = {"url": r["url"]}
 
 gemini_json = json.dumps({"mcpServers": gemini_mcp}, indent=2) + "\n"
 gemini_settings_path = os.path.join("..", ".gemini", "settings.json")
@@ -122,5 +190,15 @@ os.makedirs(os.path.dirname(gemini_settings_path), exist_ok=True)
 with open(gemini_settings_path, "w") as f:
     f.write(gemini_json)
 print(f"Updated {os.path.normpath(gemini_settings_path)} (Gemini CLI config)")
+
+# Generate env.template from per-tool .env files
+generate_env_template(active_servers + remote_services)
+
+# Install plugins into ~/.claude/settings.json
+if plugins:
+    subprocess.run(
+        [sys.executable, "scripts/install-plugin-claude.py", "--profile", profile_file],
+        check=True,
+    )
 
 print("\nDone. Run 'docker compose up -d --build' to start the stack.")

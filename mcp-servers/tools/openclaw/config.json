@@ -1,0 +1,6 @@
+{
+  "name": "openclaw",
+  "source": "remote",
+  "url": "https://api.openclaw.ai/mcp",
+  "description": "OpenClaw cloud MCP — no local Docker needed"
+}

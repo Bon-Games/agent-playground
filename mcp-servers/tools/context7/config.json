@@ -1,0 +1,7 @@
+{
+  "name": "context7",
+  "source": "local",
+  "port": 3000,
+  "mcp_path": "/mcp",
+  "description": "Up-to-date library docs via Context7"
+}

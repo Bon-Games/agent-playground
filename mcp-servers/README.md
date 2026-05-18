@@ -1,10 +1,8 @@
 # MCP Servers
 
-Manages a local stack of MCP (Model Context Protocol) servers running behind Docker. Servers are defined in `config/mcp-servers.json`, cloned or built from local Dockerfiles, and exposed over HTTP so Claude Code can connect to them.
+A self-hosted collection of MCP (Model Context Protocol) tools running behind Docker. Each tool lives in its own `tools/<name>/` folder with a `config.json`, an optional `Dockerfile`, and an optional `.env` for credentials. Claude Code and Gemini CLI are configured automatically.
 
-The base `docker-compose.yml` runs [9router](https://github.com/decolua/9router), an AI provider router for managing LLM API keys and routing across providers. An auto-generated `docker-compose.override.yml` adds the MCP server services on top. The two are independent — 9router handles LLM API calls, while the MCP servers expose tools directly to Claude Code.
-
-`install.sh` writes `.mcp.json` to both this directory and the **project root** (`../`). Claude Code reads `.mcp.json` from the project root automatically, so no manual Claude config changes are ever needed.
+The base `docker-compose.yml` runs [9router](https://github.com/decolua/9router) for LLM API routing. An auto-generated `docker-compose.override.yml` adds the MCP server services on top.
 
 ## Prerequisites
 
@@ -15,107 +13,162 @@ The base `docker-compose.yml` runs [9router](https://github.com/decolua/9router)
 ## Startup
 
 ```bash
-# 1. Clone/pull server repos and generate config files
+# 1. Clone repos, generate configs, write env.template
 ./install.sh
 
-# 2. Build images and start all containers
+# 2. Copy env.template to .env and fill in your values
+cp env.template .env
+
+# 3. Build images and start all containers
 docker compose up -d --build
 
-# 3. Reload Claude Code to pick up the updated .mcp.json
+# 4. Reload Claude Code to pick up the updated .mcp.json
 #    Use /reload in Claude Code, or restart it
 ```
-
-The servers will be available at their configured ports (e.g. `http://localhost:8080/mcp`). Claude Code reads the project-root `.mcp.json` on startup and connects automatically.
 
 ## Install
 
 ```bash
-./install.sh                              # install all servers from default config
-./install.sh --config config/unity.json  # use a specific config file
+./install.sh                                          # default profile
+./install.sh --profile config/profiles/unity.json    # Unity game dev profile
+./install.sh --profile config/profiles/all.json      # every tool
 ```
 
-`install.sh` does three things:
-
-1. Clones (or pulls) each git-sourced server repo into `servers/<name>/`
-2. Generates `docker-compose.override.yml` with a build service per server
-3. Writes `.mcp.json` to both `mcp-servers/` and the project root
+`install.sh` does:
+1. Clones (or pulls) each git-sourced server into `servers/<name>/`
+2. Generates `docker-compose.override.yml` with a service per active server
+3. Writes `.mcp.json` to both `mcp-servers/` and the project root (Claude Code reads this)
+4. Writes `.gemini/settings.json` for Gemini CLI
+5. Merges per-tool `.env` files into `env.template` scoped to the active profile
+6. Runs `scripts/install-plugin-claude.py` to write plugin entries into `~/.claude/settings.json`
 
 ## Uninstall
 
 ```bash
-./uninstall.sh    # stop all containers, remove servers/, clear generated files
+./uninstall.sh    # stop containers, remove servers/, clear generated files
 ```
 
-## Adding a Server
+## Profiles
 
-Two source types are supported: `git` (default) for repos that provide their own Dockerfile, and `local` for servers whose Dockerfile lives in this repo under `dockerfiles/`.
+Profiles live in `config/profiles/` and list tool names to activate. Each name maps to a `tools/<name>/config.json`.
 
-**Git-sourced server** — clone a remote repo and build from it:
+| Profile | Tools |
+|---|---|
+| `default.json` | context7, mcp-discord, atlassian, gws-mcp, openclaw, github, code-review |
+| `unity.json` | unity-mcp, context7 |
+| `all.json` | every tool in the catalog |
 
-```json
-{
-  "name": "my-server",
-  "repo": "https://github.com/org/my-server",
-  "branch": "main",
-  "dockerfile": "Dockerfile",
-  "port": 8081,
-  "mcp_path": "/mcp",
-  "command": ""
-}
-```
+## Adding a Tool
 
-**Local-sourced server** — Dockerfile lives in `dockerfiles/<name>/`:
+1. Create `tools/<name>/` — copy from `tools/_template/` for a starter
+2. Edit `tools/<name>/config.json` — set `source` and source-specific fields (see table below)
+3. Add `tools/<name>/Dockerfile` if `source` is `local`
+4. Add `tools/<name>/.env` with placeholder values if credentials are needed
+5. Add `"<name>"` to the relevant profile in `config/profiles/`
+6. Run `./install.sh`
 
-```json
-{
-  "name": "my-server",
-  "source": "local",
-  "local_path": "dockerfiles/my-server",
-  "port": 8081,
-  "transport": "sse",
-  "mcp_path": "/sse"
-}
-```
+See `tools/_template/README.md` for the full field reference.
 
-| Field | Applies to | Required | Description |
+### Source types
+
+| `source` | How it works | Compose output |
+|---|---|---|
+| `local` | Dockerfile in `tools/<name>/` | `build: context: ./tools/<name>` |
+| `git` | Shallow-clone repo, build its Dockerfile | `build: context: ./servers/<name>` |
+| `image` | Pull pre-built Docker Hub image | `image: <value>` |
+| `remote` | Cloud endpoint — no Docker | `.mcp.json` entry only |
+| `plugin` | Claude.ai plugin — no Docker | `~/.claude/settings.json` entry only |
+
+### Key `config.json` fields
+
+| Field | Source | Required | Description |
 |---|---|---|---|
-| `name` | both | yes | Unique identifier, used as the Docker container name |
-| `source` | both | no | `"git"` (default) or `"local"` |
+| `name` | all | yes | Unique identifier — matches the folder name |
+| `source` | all | yes | See table above |
+| `port` | local, git, image | yes | Host port to expose |
+| `mcp_path` | local, git, image | no | MCP endpoint path (default: `/mcp`) |
 | `repo` | git | yes | Git URL to clone |
-| `branch` | git | no | Branch to clone (default: `main`) |
-| `dockerfile` | git | no | Path to Dockerfile inside the repo (default: `Dockerfile`) |
-| `local_path` | local | yes | Path to the directory containing the Dockerfile |
-| `port` | both | yes | Host port to expose |
-| `transport` | both | no | MCP transport type: `"http"` (default) or `"sse"` |
-| `mcp_path` | both | no | Path for the MCP endpoint (default: `/mcp`) |
-| `command` | both | no | Override the container `CMD` |
+| `branch` | git | no | Branch (default: `main`) |
+| `image` | image | yes | Docker image reference |
+| `url` | remote | yes | Cloud MCP endpoint URL |
+| `install_url` | plugin | yes | Browser URL for manual installation |
+| `mcp_config` | plugin | yes | MCP connection payload written to `~/.claude/settings.json` |
+| `environment` | local, git, image | no | Env vars (`${VAR}` substitution from `.env`) |
+| `volumes` | local, git, image | no | Volume mount strings |
+| `platform` | all | no | OS allowlist — tool is skipped on other platforms |
 
-After editing the config:
+## Plugins
 
+Claude.ai plugins (e.g. GitHub, code-review) cannot run in Docker. The installer writes their `mcp_config` into `~/.claude/settings.json` automatically via `scripts/install-plugin-claude.py`.
+
+You can also run the plugin installer standalone:
 ```bash
-./install.sh
-docker compose up -d --build
-# Then reload Claude Code to pick up the new server
+python scripts/install-plugin-claude.py
+python scripts/install-plugin-claude.py --profile config/profiles/unity.json
 ```
+
+## Remote Services
+
+Cloud MCP endpoints like `openclaw` have no local Docker container. They appear in `.mcp.json` and `.gemini/settings.json` automatically but generate no compose service. See `tools/openclaw/README.md` for API key setup.
 
 ## File Structure
 
 ```
 mcp-servers/
 ├── config/
-│   └── mcp-servers.json         # server definitions (source of truth)
-├── dockerfiles/                 # Dockerfiles for local-sourced servers
-│   └── context7/
-│       └── Dockerfile
+│   └── profiles/
+│       ├── default.json         # default active set
+│       ├── unity.json           # Unity game dev
+│       └── all.json             # everything
+├── tools/                       # one folder per tool
+│   ├── _template/
+│   │   ├── config.json          # template for new tools
+│   │   ├── .env                 # env template example
+│   │   └── README.md            # field reference + howto
+│   ├── context7/
+│   │   ├── config.json
+│   │   └── Dockerfile
+│   ├── mcp-discord/
+│   │   ├── config.json
+│   │   ├── .env
+│   │   └── Dockerfile
+│   ├── atlassian/
+│   │   ├── config.json
+│   │   ├── .env
+│   │   └── README.md
+│   ├── playwright/
+│   │   ├── config.json
+│   │   └── README.md
+│   ├── gws-mcp/
+│   │   ├── config.json
+│   │   ├── .env
+│   │   ├── Dockerfile
+│   │   └── README.md
+│   ├── unity-mcp/
+│   │   ├── config.json
+│   │   └── README.md
+│   ├── windows-mcp/
+│   │   ├── config.json
+│   │   └── README.md
+│   ├── openclaw/
+│   │   ├── config.json
+│   │   ├── .env
+│   │   └── README.md
+│   ├── github/
+│   │   ├── config.json
+│   │   └── README.md
+│   └── code-review/
+│       ├── config.json
+│       └── README.md
 ├── scripts/
-│   ├── install.py               # install logic
-│   └── uninstall.py             # uninstall logic
+│   ├── install.py               # main installer
+│   ├── install-plugin-claude.py # writes plugins → ~/.claude/settings.json
+│   └── uninstall.py
 ├── servers/                     # cloned server repos (gitignored)
 ├── docker-compose.yml           # base stack (9router)
 ├── docker-compose.override.yml  # generated MCP services (gitignored)
+├── env.template                 # generated env var template (gitignored)
 ├── .mcp.json                    # generated Claude Code config (gitignored)
 ├── install.sh
 └── uninstall.sh
 ```
-
-The project root also gets a `.mcp.json` (written by `install.sh`) — that is the file Claude Code actually reads.

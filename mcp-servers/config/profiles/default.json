@@ -1,0 +1,4 @@
+{
+  "description": "Default local development profile",
+  "servers": ["context7", "mcp-discord", "atlassian", "gws-mcp", "openclaw", "github", "code-review"]
+}

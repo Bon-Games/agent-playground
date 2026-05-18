@@ -1,0 +1,10 @@
+{
+  "name": "windows-mcp",
+  "source": "git",
+  "repo": "https://github.com/CursorTouch/Windows-MCP",
+  "branch": "main",
+  "port": 8200,
+  "mcp_path": "/mcp",
+  "description": "Windows OS control via MCP",
+  "platform": ["windows"]
+}

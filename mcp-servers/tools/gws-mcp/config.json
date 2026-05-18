@@ -1,0 +1,14 @@
+{
+  "name": "gws-mcp",
+  "source": "local",
+  "port": 8100,
+  "mcp_path": "/mcp",
+  "description": "Google Workspace (Drive, Calendar, Gmail)",
+  "environment": {
+    "GOOGLE_APPLICATION_CREDENTIALS": "/app/credentials.json",
+    "PORT": "8100"
+  },
+  "volumes": [
+    "${GOOGLE_CREDENTIALS_FILE:-/dev/null}:/app/credentials.json:ro"
+  ]
+}

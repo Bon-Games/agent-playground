@@ -1,0 +1,12 @@
+{
+  "name": "code-review",
+  "source": "plugin",
+  "install_url": "https://claude.ai/settings/integrations",
+  "description": "Claude code-review integration (Claude.ai native integration)",
+  "mcp_config": {
+    "type": "stdio",
+    "command": "npx",
+    "args": ["-y", "@anthropic-ai/mcp-code-review"],
+    "env": {}
+  }
+}

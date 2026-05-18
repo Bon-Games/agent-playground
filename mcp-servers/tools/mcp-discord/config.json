@@ -1,0 +1,10 @@
+{
+  "name": "mcp-discord",
+  "source": "local",
+  "port": 8085,
+  "mcp_path": "/mcp",
+  "description": "Discord bot integration",
+  "environment": {
+    "DISCORD_TOKEN": "${DISCORD_TOKEN}"
+  }
+}

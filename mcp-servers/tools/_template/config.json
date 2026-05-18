@@ -1,0 +1,34 @@
+{
+  "name": "tool-name",
+  "source": "local",
+  "description": "One-line description of what this tool does",
+
+  "port": 8000,
+  "mcp_path": "/mcp",
+  "transport": "http",
+
+  "local_path": "tools/tool-name",
+
+  "repo": "https://github.com/org/repo",
+  "branch": "main",
+  "dockerfile": "Dockerfile",
+
+  "image": "org/image:tag",
+
+  "url": "https://api.example.com/mcp",
+
+  "install_url": "https://claude.com/plugins/tool-name",
+
+  "mcp_config": {
+    "type": "http",
+    "url": "https://api.example.com/mcp/v1",
+    "headers": { "Authorization": "Bearer ${TOOL_TOKEN}" }
+  },
+
+  "environment": {
+    "API_KEY": "${TOOL_API_KEY}"
+  },
+  "volumes": [],
+  "platform": ["linux", "darwin", "windows"],
+  "command": ""
+}

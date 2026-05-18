@@ -1,0 +1,8 @@
+{
+  "name": "playwright",
+  "source": "image",
+  "image": "mcp/playwright:latest",
+  "port": 8931,
+  "mcp_path": "/mcp",
+  "description": "Browser automation via Playwright"
+}

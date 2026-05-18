@@ -1,0 +1,4 @@
+{
+  "description": "All supported tools",
+  "servers": ["unity-mcp", "context7", "mcp-discord", "atlassian", "playwright", "gws-mcp", "windows-mcp", "openclaw", "github", "code-review"]
+}
