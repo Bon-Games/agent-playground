@@ -15,6 +15,16 @@
       "local_path": "dockerfiles/context7",
       "port": 3000,
       "mcp_path": "/mcp"
+    },
+    {
+      "name": "mcp-discord",
+      "source": "local",
+      "local_path": "dockerfiles/mcp-discord",
+      "port": 8085,
+      "mcp_path": "/mcp",
+      "environment": {
+        "DISCORD_TOKEN": "${DISCORD_TOKEN}"
+      }
     }
   ]
 }

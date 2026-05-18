@@ -64,6 +64,7 @@ for s in servers:
     name = s["name"]
     port = s["port"]
     command = s.get("command", "")
+    environment = s.get("environment", {})
     context, dockerfile = build_config(s)
 
     lines += [
@@ -75,6 +76,10 @@ for s in servers:
         f"    ports:",
         f'      - "{port}:{port}"',
     ]
+    if environment:
+        lines.append("    environment:")
+        for k, v in environment.items():
+            lines.append(f"      {k}: {v}")
     if command:
         lines.append(f"    command: {command}")
     lines.append(f"    restart: unless-stopped")
@@ -103,5 +108,19 @@ root_mcp = os.path.join("..", ".mcp.json")
 with open(root_mcp, "w") as f:
     f.write(mcp_json)
 print(f"Updated {os.path.normpath(root_mcp)} (project root — Claude Code reads this)")
+
+# Regenerate .gemini/settings.json
+gemini_mcp = {}
+for s in servers:
+    gemini_mcp[s["name"]] = {
+        "url": f"http://localhost:{s['port']}{s.get('mcp_path', '/mcp')}"
+    }
+
+gemini_json = json.dumps({"mcpServers": gemini_mcp}, indent=2) + "\n"
+gemini_settings_path = os.path.join("..", ".gemini", "settings.json")
+os.makedirs(os.path.dirname(gemini_settings_path), exist_ok=True)
+with open(gemini_settings_path, "w") as f:
+    f.write(gemini_json)
+print(f"Updated {os.path.normpath(gemini_settings_path)} (Gemini CLI config)")
 
 print("\nDone. Run 'docker compose up -d --build' to start the stack.")
