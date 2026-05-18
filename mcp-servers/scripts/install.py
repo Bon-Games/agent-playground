@@ -1,6 +1,6 @@
 import json, subprocess, os, sys, platform as _platform
 sys.path.insert(0, os.path.dirname(__file__))
-from lib import load_catalog
+from lib import load_catalog, yaml_indent as i, clone_or_update
 
 
 DEFAULT_PROFILE = "config/profiles/default.json"
@@ -48,47 +48,44 @@ def service_lines(s):
     port = s["port"]
     source = s.get("source", "git")
 
-    lines = [f"  {name}:"]
+    lines = [i(1, f"{name}:")]
 
     if source == "image":
-        lines.append(f"    image: {s['image']}")
+        lines.append(i(2, f"image: {s['image']}"))
     else:
-        if source == "local":
-            ctx = f"./{s.get('local_path', os.path.join('tools', name))}"
-        else:
-            ctx = f"./servers/{name}"
+        ctx = f"./{s.get('local_path', os.path.join('tools', name))}" if source == "local" else f"./servers/{name}"
         lines += [
-            f"    build:",
-            f"      context: {ctx}",
-            f"      dockerfile: {s.get('dockerfile', 'Dockerfile')}",
+            i(2, "build:"),
+            i(3, f"context: {ctx}"),
+            i(3, f"dockerfile: {s.get('dockerfile', 'Dockerfile')}"),
         ]
 
     lines += [
-        f"    container_name: {name}",
-        f"    ports:",
-        f'      - "{port}:{port}"',
+        i(2, f"container_name: {name}"),
+        i(2, "ports:"),
+        i(3, f'- "{port}:{port}"'),
     ]
 
     environment = s.get("environment", {})
     if environment:
-        lines.append("    environment:")
+        lines.append(i(2, "environment:"))
         for k, v in environment.items():
-            lines.append(f"      {k}: {v}")
+            lines.append(i(3, f"{k}: {v}"))
 
     volumes = s.get("volumes", [])
     if volumes:
-        lines.append("    volumes:")
+        lines.append(i(2, "volumes:"))
         for v in volumes:
-            lines.append(f"      - {v}")
+            lines.append(i(3, f"- {v}"))
 
     if s.get("command"):
-        lines.append(f"    command: {s['command']}")
+        lines.append(i(2, f"command: {s['command']}"))
 
-    lines += ["    restart: unless-stopped", ""]
+    lines += [i(2, "restart: unless-stopped"), ""]
     return lines
 
 
-def generate_env_template(tools, output_path="env.template"):
+def generate_env_template(tools, output_path=".env"):
     parts = []
     for t in tools:
         env_file = os.path.join(t.get("local_path", os.path.join("tools", t["name"])), ".env")
@@ -133,19 +130,7 @@ for s in active_servers:
         print(f"[{name}] {source} source, skipping clone.")
         continue
 
-    repo = s["repo"]
-    branch = s.get("branch", "main")
-    dest = os.path.join("servers", name)
-
-    if os.path.isdir(os.path.join(dest, ".git")):
-        print(f"[{name}] already cloned — pulling latest...")
-        subprocess.run(["git", "-C", dest, "pull"], check=True)
-    else:
-        print(f"[{name}] cloning {repo} (branch: {branch})...")
-        subprocess.run(
-            ["git", "clone", "-b", branch, "--depth", "1", repo, dest],
-            check=True,
-        )
+    clone_or_update(name, s["repo"], s.get("branch", "main"), os.path.join("servers", name))
 
 # Generate docker-compose.override.yml
 compose_lines = ["services:"]
@@ -200,5 +185,27 @@ if plugins:
         [sys.executable, "scripts/install-plugin-claude.py", "--profile", profile_file],
         check=True,
     )
+
+# Run per-tool install.py scripts in parallel
+procs = []
+for s in active_servers + remote_services + plugins:
+    name = s["name"]
+    tool_install = os.path.join(TOOLS_DIR, name, "install.py")
+    if os.path.isfile(tool_install):
+        print(f"[{name}] starting {tool_install}...")
+        proc = subprocess.Popen([sys.executable, tool_install])
+        procs.append((name, proc))
+    else:
+        print(f"No custom install.py found for {name}")
+
+failed = []
+for tool_dir, proc in procs:
+    proc.wait()
+    if proc.returncode != 0:
+        failed.append(tool_dir)
+
+if failed:
+    print(f"[ERROR] Tool installs failed: {', '.join(failed)}", file=sys.stderr)
+    sys.exit(1)
 
 print("\nDone. Run 'docker compose up -d --build' to start the stack.")
