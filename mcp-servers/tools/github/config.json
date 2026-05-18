@@ -1,13 +1,6 @@
 {
   "name": "github",
   "source": "plugin",
-  "install_url": "https://github.com/settings/installations",
-  "description": "GitHub integration — browse repos, open PRs, review code",
-  "mcp_config": {
-    "type": "http",
-    "url": "https://api.githubcopilot.com/mcp/",
-    "headers": {
-      "Authorization": "Bearer ${GITHUB_TOKEN}"
-    }
-  }
+  "plugin_id": "github@claude-plugins-official",
+  "description": "GitHub integration — browse repos, open PRs, review code"
 }
