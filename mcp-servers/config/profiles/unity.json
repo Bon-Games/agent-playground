@@ -1,4 +1,8 @@
 {
   "description": "Unity game development profile",
-  "servers": ["unity-mcp", "context7"]
+  "servers": [
+    "unity-mcp",
+    "context7",
+    "code-review"
+  ]
 }

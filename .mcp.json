@@ -1,24 +1,3 @@
 {
-  "mcpServers": {
-    "context7": {
-      "type": "http",
-      "url": "http://localhost:3000/mcp"
-    },
-    "mcp-discord": {
-      "type": "http",
-      "url": "http://localhost:8085/mcp"
-    },
-    "atlassian": {
-      "type": "http",
-      "url": "http://localhost:9090/mcp"
-    },
-    "gws-mcp": {
-      "type": "http",
-      "url": "http://localhost:8100/mcp"
-    },
-    "openclaw": {
-      "type": "http",
-      "url": "https://api.openclaw.ai/mcp"
-    }
-  }
+  "mcpServers": {}
 }
