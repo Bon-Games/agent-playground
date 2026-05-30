@@ -5,10 +5,14 @@
   "mcp_path": "/mcp",
   "description": "Google Workspace (Drive, Calendar, Gmail)",
   "environment": {
-    "GOOGLE_APPLICATION_CREDENTIALS": "/app/credentials.json",
+    "GEMINI_CLI_WORKSPACE_FORCE_FILE_STORAGE": "true",
     "PORT": "8100"
   },
   "volumes": [
-    "${GOOGLE_CREDENTIALS_FILE:-/dev/null}:/app/credentials.json:ro"
+    "gws-token:/opt/workspace"
+  ],
+  "command": [
+    "node",
+    "workspace-server/dist/index.js"
   ]
 }

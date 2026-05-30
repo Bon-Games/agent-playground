@@ -1,0 +1,13 @@
+services:
+  gws-mcp:
+    build: .
+    image: gws-mcp:latest
+    hostname: wsmcp # This must be persisted; the access token is bound to this.
+    environment:
+      GEMINI_CLI_WORKSPACE_FORCE_FILE_STORAGE: "true"
+    volumes:
+      - ws-token:/opt/workspace # persist token + master key
+    command: [ "node", "workspace-server/dist/index.js" ]
+
+  volumes:
+    ws-token:
