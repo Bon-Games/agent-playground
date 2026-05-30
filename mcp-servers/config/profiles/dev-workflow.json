@@ -1,0 +1,4 @@
+{
+  "description": "Full developer workflow: Jira, GitHub, Gmail, docs, Unity, scheduled triage",
+  "servers": ["context7", "atlassian", "gws-mcp", "github", "code-review", "unity-mcp", "scheduler"]
+}

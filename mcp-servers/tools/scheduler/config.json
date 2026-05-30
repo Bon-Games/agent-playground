@@ -1,0 +1,19 @@
+{
+  "name": "scheduler",
+  "source": "service",
+  "description": "Scheduled workflow runner — daily triage and automation via Anthropic API",
+  "depends_on": ["atlassian", "gws-mcp", "context7"],
+  "environment": {
+    "ANTHROPIC_API_KEY": "${ANTHROPIC_API_KEY}",
+    "TRIAGE_HOUR": "${TRIAGE_HOUR:-8}",
+    "TRIAGE_DAYS": "${TRIAGE_DAYS:-mon,tue,wed,thu,fri}",
+    "TELEGRAM_BOT_TOKEN": "${TELEGRAM_BOT_TOKEN}",
+    "TELEGRAM_CHAT_ID": "${TELEGRAM_CHAT_ID}",
+    "JIRA_URL": "${JIRA_URL}",
+    "PYTHONPATH": "/app/workflows"
+  },
+  "volumes": [
+    "../workflows:/app/workflows:ro",
+    "../.claude/commands:/app/.claude/commands:ro"
+  ]
+}

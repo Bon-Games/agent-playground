@@ -21,7 +21,7 @@ def resolve_profile(tools_dir, profile_path):
     with open(profile_path) as f:
         profile = json.load(f)
 
-    active_servers, remote_services, plugins = [], [], []
+    active_servers, remote_services, plugins, service_only = [], [], [], []
     for name in profile.get("servers", []):
         if name not in catalog:
             print(f"[WARN] '{name}' not in tools/ catalog — skipping")
@@ -34,18 +34,21 @@ def resolve_profile(tools_dir, profile_path):
         if source == "remote":
             remote_services.append(entry)
             continue
+        if source == "service":
+            service_only.append(entry)
+            continue
         allowed = entry.get("platform", ["linux", "darwin", "windows"])
         if current_os not in allowed:
             print(f"[WARN] '{name}' not supported on {current_os} — skipping")
             continue
         active_servers.append(entry)
 
-    return active_servers, remote_services, plugins
+    return active_servers, remote_services, plugins, service_only
 
 
 def service_lines(s):
     name = s["name"]
-    port = s["port"]
+    port = s.get("port")
     source = s.get("source", "git")
 
     lines = [i(1, f"{name}:")]
@@ -53,18 +56,20 @@ def service_lines(s):
     if source == "image":
         lines.append(i(2, f"image: {s['image']}"))
     else:
-        ctx = f"./{s.get('local_path', os.path.join('tools', name))}" if source == "local" else f"./servers/{name}"
+        ctx = f"./{s.get('local_path', os.path.join('tools', name))}" if source in ("local", "service") else f"./servers/{name}"
         lines += [
             i(2, "build:"),
             i(3, f"context: {ctx}"),
             i(3, f"dockerfile: {s.get('dockerfile', 'Dockerfile')}"),
         ]
 
-    lines += [
-        i(2, f"container_name: {name}"),
-        i(2, "ports:"),
-        i(3, f'- "{port}:{port}"'),
-    ]
+    lines.append(i(2, f"container_name: {name}"))
+
+    if port:
+        lines += [
+            i(2, "ports:"),
+            i(3, f'- "{port}:{port}"'),
+        ]
 
     environment = s.get("environment", {})
     if environment:
@@ -77,6 +82,12 @@ def service_lines(s):
         lines.append(i(2, "volumes:"))
         for v in volumes:
             lines.append(i(3, f"- {v}"))
+
+    depends_on = s.get("depends_on", [])
+    if depends_on:
+        lines.append(i(2, "depends_on:"))
+        for dep in depends_on:
+            lines.append(i(3, f"- {dep}"))
 
     if s.get("command"):
         lines.append(i(2, f"command: {s['command']}"))
@@ -114,9 +125,9 @@ while args:
         usage()
 
 profile_file = profile_file or DEFAULT_PROFILE
-active_servers, remote_services, plugins = resolve_profile(TOOLS_DIR, profile_file)
+active_servers, remote_services, plugins, service_only = resolve_profile(TOOLS_DIR, profile_file)
 
-if not active_servers and not remote_services and not plugins:
+if not active_servers and not remote_services and not plugins and not service_only:
     print("No tools to install.")
     sys.exit(0)
 
@@ -132,9 +143,9 @@ for s in active_servers:
 
     clone_or_update(name, s["repo"], s.get("branch", "main"), os.path.join("servers", name))
 
-# Generate docker-compose.override.yml
+# Generate docker-compose.override.yml (active MCP servers + service-only containers)
 compose_lines = ["services:"]
-for s in active_servers:
+for s in active_servers + service_only:
     compose_lines.extend(service_lines(s))
 
 with open("docker-compose.override.yml", "w") as f:
@@ -177,7 +188,7 @@ with open(gemini_settings_path, "w") as f:
 print(f"Updated {os.path.normpath(gemini_settings_path)} (Gemini CLI config)")
 
 # Generate env.template from per-tool .env files
-generate_env_template(active_servers + remote_services)
+generate_env_template(active_servers + remote_services + service_only)
 
 # Install plugins into ~/.claude/settings.json
 if plugins:
@@ -188,7 +199,7 @@ if plugins:
 
 # Run per-tool install.py scripts in parallel
 procs = []
-for s in active_servers + remote_services + plugins:
+for s in active_servers + remote_services + plugins + service_only:
     name = s["name"]
     tool_install = os.path.join(TOOLS_DIR, name, "install.py")
     if os.path.isfile(tool_install):
